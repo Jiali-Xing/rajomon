@@ -1,4 +1,4 @@
-package charon
+package rajomon
 
 import (
 	"context"
@@ -27,7 +27,7 @@ var (
 	trackPrice         = false
 )
 
-// PriceTable implements the Charon price table
+// PriceTable implements the Rajomon price table
 type PriceTable struct {
 	// The following lockfree hashmap should contain total price, selfprice and downstream price
 	// initprice is the price table's initprice.

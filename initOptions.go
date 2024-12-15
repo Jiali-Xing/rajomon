@@ -1,4 +1,4 @@
-package charon
+package rajomon
 
 import (
 	"math/rand"
@@ -46,7 +46,7 @@ func NewPriceTable(initprice int64, nodeName string, callmap map[string][]string
 	return priceTable
 }
 
-func NewCharon(nodeName string, callmap map[string][]string, options map[string]interface{}) *PriceTable {
+func NewRajomon(nodeName string, callmap map[string][]string, options map[string]interface{}) *PriceTable {
 	priceTable := &PriceTable{
 		initprice:           0,
 		nodeName:            nodeName,
