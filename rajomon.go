@@ -46,6 +46,7 @@ type PriceTable struct {
 	lazyResponse       bool
 	// updateRate is the rate at which price should be updated at least once.
 	tokensLeft          int64
+	tokenLimit          int64
 	tokenUpdateRate     time.Duration
 	lastUpdateTime      time.Time
 	lastRateLimitedTime time.Time

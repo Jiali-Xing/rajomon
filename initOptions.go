@@ -7,45 +7,6 @@ import (
 	"time"
 )
 
-// NewPriceTable creates a new instance of PriceTable.
-func NewPriceTable(initprice int64, nodeName string, callmap map[string][]string) (priceTable *PriceTable) {
-	priceTable = &PriceTable{
-		initprice:          initprice,
-		nodeName:           nodeName,
-		callMap:            callmap,
-		priceTableMap:      sync.Map{},
-		rateLimiting:       false,
-		loadShedding:       false,
-		pinpointThroughput: false,
-		pinpointLatency:    false,
-		pinpointQueuing:    false,
-		rateLimiter:        make(chan int64, 1),
-		tokensLeft:         10,
-		tokenUpdateRate:    time.Millisecond * 10,
-		lastUpdateTime:     time.Now(),
-		tokenUpdateStep:    1,
-		tokenStrategy:      "all",
-		throughputCounter:  0,
-		priceUpdateRate:    time.Millisecond * 10,
-		observedDelay:      time.Duration(0),
-		clientTimeOut:      time.Millisecond * 5,
-		priceStep:          1,
-		// debug:              false,
-		// debugFreq:          4000,
-	}
-
-	// Only refill the tokens when the interceptor is for enduser.
-	if priceTable.nodeName == "client" {
-		go priceTable.tokenRefill(priceTable.tokenRefillDist, priceTable.tokenUpdateStep, priceTable.tokenUpdateRate)
-	} else if priceTable.pinpointThroughput {
-		go priceTable.throughputCheck()
-	} else if priceTable.pinpointLatency {
-		go priceTable.latencyCheck()
-	}
-
-	return priceTable
-}
-
 func NewRajomon(nodeName string, callmap map[string][]string, options map[string]interface{}) *PriceTable {
 	priceTable := &PriceTable{
 		initprice:           0,
@@ -62,6 +23,7 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 		invokeAfterRL:       false,
 		lazyResponse:        false,
 		tokensLeft:          10,
+		tokenLimit:          50,
 		tokenUpdateRate:     time.Millisecond * 10,
 		lastUpdateTime:      time.Now(),
 		lastRateLimitedTime: time.Now().Add(-time.Second),
@@ -137,6 +99,11 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 	if tokensLeft, ok := options["tokensLeft"].(int64); ok {
 		priceTable.tokensLeft = tokensLeft
 		logger("tokensLeft		of %s set to %v\n", nodeName, tokensLeft)
+	}
+
+	if tokenLimit, ok := options["tokenLimit"].(int64); ok {
+		priceTable.tokenLimit = tokenLimit
+		logger("tokenLimit		of %s set to %v\n", nodeName, tokenLimit)
 	}
 
 	if tokenUpdateRate, ok := options["tokenUpdateRate"].(time.Duration); ok {
@@ -293,6 +260,10 @@ func (pt *PriceTable) DeductTokens(n int64) bool {
 
 // Atomic addition of tokens
 func (pt *PriceTable) AddTokens(n int64) {
+	// if the tokensLeft is greater than the tokenLimit, then do not add any tokens
+	if pt.tokensLeft > pt.tokenLimit {
+		return
+	}
 	if !atomicTokens {
 		pt.tokensLeft += n
 		return
@@ -310,10 +281,8 @@ func (pt *PriceTable) tokenRefill(tokenRefillDist string, tokenUpdateStep int64,
 		lambda := float64(1) / float64(tokenUpdateRate.Milliseconds())
 
 		for range ticker.C {
-			// Add tokens to the client deterministically or randomly, depending on the tokenRefillDist
-			// if pt.tokenRefillDist == "fixed" {
+			// Add tokens to the client deterministically
 			pt.AddTokens(tokenUpdateStep)
-			// }
 
 			if pt.rateLimitWaiting {
 				// pt.lastUpdateTime = time.Now()
