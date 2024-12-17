@@ -43,10 +43,9 @@ type PriceTable struct {
 	pinpointQueuing    bool
 	rateLimiter        chan int64
 	invokeAfterRL      bool
-	lazyResponse       bool
+	skipPrice          bool
 	// updateRate is the rate at which price should be updated at least once.
 	tokensLeft          int64
-	tokenLimit          int64
 	tokenUpdateRate     time.Duration
 	lastUpdateTime      time.Time
 	lastRateLimitedTime time.Time
@@ -440,8 +439,8 @@ func (pt *PriceTable) UnaryInterceptor(ctx context.Context, req interface{}, inf
 
 	// Attach the price info to response before sending
 	// right now let's just propagate the corresponding price of the RPC method rather than a whole pricetable.
-	// if not pt.lazyResponse, then attach the price to the response with a probability of 1/5
-	if !pt.lazyResponse {
+	// if not pt.skipPrice, then attach the price to the response with a probability of 1/5
+	if !pt.skipPrice {
 		if tok%5 == 0 {
 			header := metadata.Pairs("price", price_string, "name", pt.nodeName)
 			logger("[Preparing Resp]:	Total price of %s is %s\n", methodName, price_string)

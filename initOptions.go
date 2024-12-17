@@ -21,9 +21,8 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 		pinpointQueuing:     false,
 		rateLimiter:         make(chan int64, 1),
 		invokeAfterRL:       false,
-		lazyResponse:        false,
+		skipPrice:           false,
 		tokensLeft:          10,
-		tokenLimit:          50,
 		tokenUpdateRate:     time.Millisecond * 10,
 		lastUpdateTime:      time.Now(),
 		lastRateLimitedTime: time.Now().Add(-time.Second),
@@ -91,19 +90,14 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 		logger("invokeAfterRL		of %s set to %v\n", nodeName, invokeAfterRL)
 	}
 
-	if lazyResponse, ok := options["lazyResponse"].(bool); ok {
-		priceTable.lazyResponse = lazyResponse
-		logger("lazyResponse		of %s set to %v\n", nodeName, lazyResponse)
+	if skipPrice, ok := options["lazyResponse"].(bool); ok {
+		priceTable.skipPrice = skipPrice
+		logger("skipPrice		of %s set to %v\n", nodeName, skipPrice)
 	}
 
 	if tokensLeft, ok := options["tokensLeft"].(int64); ok {
 		priceTable.tokensLeft = tokensLeft
 		logger("tokensLeft		of %s set to %v\n", nodeName, tokensLeft)
-	}
-
-	if tokenLimit, ok := options["tokenLimit"].(int64); ok {
-		priceTable.tokenLimit = tokenLimit
-		logger("tokenLimit		of %s set to %v\n", nodeName, tokenLimit)
 	}
 
 	if tokenUpdateRate, ok := options["tokenUpdateRate"].(time.Duration); ok {
@@ -260,10 +254,6 @@ func (pt *PriceTable) DeductTokens(n int64) bool {
 
 // Atomic addition of tokens
 func (pt *PriceTable) AddTokens(n int64) {
-	// if the tokensLeft is greater than the tokenLimit, then do not add any tokens
-	if pt.tokensLeft > pt.tokenLimit {
-		return
-	}
 	if !atomicTokens {
 		pt.tokensLeft += n
 		return
