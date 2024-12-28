@@ -215,23 +215,29 @@ func (pt *PriceTable) UpdatePricebyQueueDelayExp(ctx context.Context) error {
 
 // UpdatePricebyQueueDelayExp uses exponential function to adjust the price step.
 func (pt *PriceTable) UpdatePricebyQueueDelayLog(ctx context.Context) error {
-	ownPrice_string, _ := pt.priceTableMap.Load("ownprice")
-	ownPrice := ownPrice_string.(int64)
+	// 1. Retrieve the current ownPrice
+	ownPriceInterface, _ := pt.priceTableMap.Load("ownprice")
+	ownPrice := ownPriceInterface.(int64)
 
-	// read the gapLatency from context ctx
+	// 2. Extract gapLatency and calculate the latency difference (diff)
 	gapLatency := ctx.Value("gapLatency").(float64)
-	// Calculate the priceStep as a fraction of the difference between gapLatency and latencyThreshold
-
 	diff := int64(gapLatency*1000) - pt.latencyThreshold.Microseconds()
-	// adjustment is a logarithmic function of diff*priceStep/1000 if diff > 0
-	adjustment := int64(0)
-	if diff > 0 {
-		adjustment = int64(math.Log(float64(diff*pt.priceStep/10000) + 1))
-	} else if 2*diff < -pt.latencyThreshold.Microseconds() {
-		adjustment = -1
+	adjustment := pt.calculatePriceAdjustmentLinear(diff)
+
+	// Implement the decay mechanism
+	if adjustment > 0 {
+		if pt.consecutiveIncreases >= 1 {
+			// If the counter exceeds the threshold, decay the step size by 1/2 ** counter
+			adjustment = int64(float64(adjustment) / math.Pow(2, float64(pt.consecutiveIncreases)))
+		}
+		pt.consecutiveIncreases++ // Increment counter for consecutive increases
+	} else {
+		// Reset counter and step size to non-decay version
+		pt.consecutiveIncreases = 0
+		logger("[Reset Price Step]: Price step reset to initial value %d\n", pt.initprice)
 	}
 
-	logger("[Update Price by Queue Delay]: own price %d, step %d\n", ownPrice, adjustment)
+	logger("[Update Price by Queue Delay]: Own price %d, step %d\n", ownPrice, adjustment)
 
 	ownPrice += adjustment
 	// Set reservePrice to the larger of pt.guidePrice and 0
@@ -242,7 +248,12 @@ func (pt *PriceTable) UpdatePricebyQueueDelayLog(ctx context.Context) error {
 	}
 
 	pt.priceTableMap.Store("ownprice", ownPrice)
-	logger("[Update Price by Queue Delay]: Own price %d\n", ownPrice)
+	// run the following code every 200 milliseconds
+	if pt.lastUpdateTime.Add(200 * time.Millisecond).Before(time.Now()) {
+		recordPrice("[Update Price by Queue Delay]: Own price updated to %d\n", ownPrice)
+		recordPrice("[Incremental Waiting Time Maximum]:	%f ms.\n", gapLatency)
+		pt.lastUpdateTime = time.Now()
+	}
 
 	return nil
 }

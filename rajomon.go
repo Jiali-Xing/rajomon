@@ -45,25 +45,26 @@ type PriceTable struct {
 	invokeAfterRL      bool
 	skipPrice          bool
 	// updateRate is the rate at which price should be updated at least once.
-	tokensLeft          int64
-	tokenUpdateRate     time.Duration
-	lastUpdateTime      time.Time
-	lastRateLimitedTime time.Time
-	tokenUpdateStep     int64
-	tokenRefillDist     string
-	tokenStrategy       string
-	priceStrategy       string
-	throughputCounter   int64
-	priceUpdateRate     time.Duration
-	observedDelay       time.Duration
-	clientTimeOut       time.Duration
-	clientBackoff       time.Duration
-	randomRateLimit     int64
-	throughputThreshold int64
-	latencyThreshold    time.Duration
-	priceStep           int64
-	priceAggregation    string
-	guidePrice          int64
+	tokensLeft           int64
+	tokenUpdateRate      time.Duration
+	lastUpdateTime       time.Time
+	lastRateLimitedTime  time.Time
+	tokenUpdateStep      int64
+	tokenRefillDist      string
+	tokenStrategy        string
+	priceStrategy        string
+	throughputCounter    int64
+	priceUpdateRate      time.Duration
+	observedDelay        time.Duration
+	clientTimeOut        time.Duration
+	clientBackoff        time.Duration
+	randomRateLimit      int64
+	throughputThreshold  int64
+	latencyThreshold     time.Duration
+	priceStep            int64
+	priceAggregation     string
+	guidePrice           int64
+	consecutiveIncreases int64
 }
 
 /*
@@ -213,7 +214,9 @@ func (pt *PriceTable) UnaryInterceptorEnduser(ctx context.Context, method string
 			logger("[Sending Req Enduser]: The metadata for request is %s\n", metadataLog)
 		}
 	}
-	// if `randomRateLimit` is greater than 0, then we randomly drop requests based on the last digit of `request-id` in md
+
+	// If `randomRateLimit` is greater than 0, then we randomly drop requests based on the last digit of `request-id` in md
+	// This functionality is used for debugging purposes mostly, not recommended for production use and not enabled by default.
 	if pt.randomRateLimit > 0 {
 		// get the request-id from the metadata
 		if requestIDs, found := md["request-id"]; found && len(requestIDs) > 0 {
@@ -236,15 +239,17 @@ func (pt *PriceTable) UnaryInterceptorEnduser(ctx context.Context, method string
 		}
 	}
 
-	// Check the time duration since the last RateLimited error
+	// If clientbackoff is greater than 0, then we check the time duration since the last RateLimited error
+	// If the time duration is less than clientbackoff, then we drop the request without waiting.
+	// This functionality is unnecessary because the price update of Rajomon rate limits the enduser already, so it is not enabled by default.
 	if pt.clientBackoff > 0 && time.Since(pt.lastRateLimitedTime) < pt.clientBackoff {
 		if !pt.rateLimitWaiting {
 			logger("[Backoff Triggered]:	Client is rate limited, req dropped without waiting.")
 			// the request is dropped without waiting in this scenario, but we want to return an error to the client
 			// to do this, we use a fake invoker without actually sending the request to the server
-			// Invoke the gRPC method with the new callOptions: MaxCallSendMsgSize as 0
-			// append to opts
+			// Invoke the gRPC method with the new callOptions: MaxCallSendMsgSize as 0 append to opts.
 			if pt.invokeAfterRL {
+				// this fake invoker has very high overhead, so it is not recommended to use it in production, and not enabled by default.
 				opts = append(opts, grpc.MaxCallSendMsgSize(0))
 				_ = invoker(ctx, method, req, reply, cc, opts...)
 			}
