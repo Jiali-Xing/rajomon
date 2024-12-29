@@ -45,6 +45,7 @@ type PriceTable struct {
 	fakeInvoker        bool
 	skipPrice          bool
 	fastDrop           bool
+	fastDropFactor     int64
 	// updateRate is the rate at which price should be updated at least once.
 	tokensLeft           int64
 	tokenUpdateRate      time.Duration
@@ -66,6 +67,8 @@ type PriceTable struct {
 	priceAggregation     string
 	guidePrice           int64
 	consecutiveIncreases int64
+	consecutiveDecreases int64
+	decayRate            float64
 }
 
 /*

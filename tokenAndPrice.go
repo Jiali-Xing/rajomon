@@ -125,29 +125,49 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 	adjustment := diff * pt.priceStep / 10000
 
 	// Implement the decay mechanism
-	if adjustment > 0 {
-		if pt.priceStrategy != "linear" && pt.consecutiveIncreases >= 1 {
-			if pt.priceStrategy == "expgrow" {
-				// If the counter exceeds the threshold, grow the step size by 2 ** counter
-				adjustment = adjustment * int64(math.Pow(2, float64(pt.consecutiveIncreases)))
-				logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveIncreases)
+	if pt.priceStrategy == "expdecay" || pt.priceStrategy == "expgrow" {
+		if adjustment > 0 {
+			if pt.consecutiveIncreases >= 1 {
+				if pt.priceStrategy == "expgrow" {
+					// If the counter exceeds the threshold, grow the step size by 2 ** counter
+					adjustment <<= uint(pt.consecutiveIncreases)
+					logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveIncreases)
+				}
+				if pt.priceStrategy == "expdecay" {
+					// If the counter exceeds the threshold, decay the step size by 1/5 ** counter
+					adjustment = int64(float64(adjustment) * math.Pow(pt.decayRate, float64(pt.consecutiveIncreases)))
+					logger("[Price Step Decay]: Price step decreased by 1/2 ** %d\n", pt.consecutiveIncreases)
+				}
 			}
-			if pt.priceStrategy == "expdecay" {
-				// If the counter exceeds the threshold, decay the step size by 1/2 ** counter
-				adjustment = int64(float64(adjustment) / math.Pow(2, float64(pt.consecutiveIncreases)))
-				logger("[Price Step Decay]: Price step decreased by 1/2 ** %d\n", pt.consecutiveIncreases)
+			pt.consecutiveIncreases++ // Increment counter for consecutive increases
+			pt.consecutiveDecreases = 0
+		} else if adjustment < 0 && !pt.fastDrop {
+			if pt.consecutiveDecreases >= 1 {
+				if pt.priceStrategy == "expgrow" {
+					// If the counter exceeds the threshold, grow the step size by 2 ** counter
+					adjustment <<= uint(pt.consecutiveDecreases)
+					logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveDecreases)
+				}
+				if pt.priceStrategy == "expdecay" {
+					// If the counter exceeds the threshold, decay the step size by 1/5 ** counter
+					adjustment = int64(float64(adjustment) * math.Pow(pt.decayRate, float64(pt.consecutiveDecreases)))
+					logger("[Price Step Decay]: Price step decreased by 4/5 ** %d\n", pt.consecutiveDecreases)
+				}
 			}
+			pt.consecutiveDecreases++ // Increment counter for consecutive decreases
+			// Reset counter and step size to non-decay version
+			pt.consecutiveIncreases = 0
 		}
-		pt.consecutiveIncreases++ // Increment counter for consecutive increases
-	} else {
-		// Reset counter and step size to non-decay version
+	} else if pt.priceStrategy == "quadratic" {
+		// Use a non-linear adjustment: larger adjustment for larger differences
+		adjustment <<= 1
+	}
+
+	if pt.fastDrop && diff < 0 {
+		// Implement the decay mechanism of fastdrop
+		adjustment = -ownPrice / pt.fastDropFactor
 		pt.consecutiveIncreases = 0
-		logger("[Reset Price Step]: Price step reset to initial value.")
-		if pt.fastDrop {
-			// Implement the decay mechanism of fastdrop
-			adjustment = -ownPrice / 2
-			logger("[Price Step Decay]: Price step decreased by half\n")
-		}
+		logger("[Price Step Decay]: Price step decreased by 1/4 of current price.\n")
 	}
 
 	logger("[Update Price by Queue Delay]: Own price %d, step %d\n", ownPrice, adjustment)
