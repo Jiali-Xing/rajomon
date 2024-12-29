@@ -58,10 +58,10 @@ func (pt *PriceTable) queuingCheck() {
 			pt.UpdateOwnPrice(pt.overloadDetection(ctx))
 		} else if pt.priceStrategy == "proportional" {
 			pt.UpdatePricebyQueueDelay(ctx)
-		} else if pt.priceStrategy == "exponential" {
-			pt.UpdatePricebyQueueDelayExp(ctx)
-		} else if pt.priceStrategy == "log" {
-			pt.UpdatePricebyQueueDelayLog(ctx)
+		} else if pt.priceStrategy == "expgrow" {
+			pt.UpdatePriceExpGrow(ctx)
+		} else if pt.priceStrategy == "expdecay" {
+			pt.UpdatePriceExpDecay(ctx)
 		} else if pt.priceStrategy == "linear" {
 			pt.UpdatePricebyQueueDelayLinear(ctx)
 		}

@@ -183,38 +183,8 @@ func (pt *PriceTable) UpdatePricebyQueueDelayLinear(ctx context.Context) error {
 	return nil
 }
 
-// UpdatePricebyQueueDelayExp uses exponential function to adjust the price step.
-func (pt *PriceTable) UpdatePricebyQueueDelayExp(ctx context.Context) error {
-	ownPrice_string, _ := pt.priceTableMap.Load("ownprice")
-	ownPrice := ownPrice_string.(int64)
-
-	// read the gapLatency from context ctx
-	gapLatency := ctx.Value("gapLatency").(float64)
-	// Calculate the priceStep as a fraction of the difference between gapLatency and latencyThreshold
-
-	diff := int64(gapLatency*1000) - pt.latencyThreshold.Microseconds()
-	// adjustment is exponential function of diff/1000
-	adjustment := int64(math.Exp(float64(diff*pt.priceStep/10000))) - 1
-
-	logger("[Update Price by Queue Delay]: own price %d, step %d\n", ownPrice, adjustment)
-
-	ownPrice += adjustment
-
-	// Set reservePrice to the larger of pt.guidePrice and 0
-	reservePrice := int64(math.Max(float64(pt.guidePrice), 0))
-
-	if ownPrice <= reservePrice {
-		ownPrice = reservePrice
-	}
-
-	pt.priceTableMap.Store("ownprice", ownPrice)
-	logger("[Update Price by Queue Delay]: Own price updated to %d\n", ownPrice)
-
-	return nil
-}
-
-// UpdatePricebyQueueDelayExp uses exponential function to adjust the price step.
-func (pt *PriceTable) UpdatePricebyQueueDelayLog(ctx context.Context) error {
+// UpdatePriceExpGrow uses exponential function to adjust the price step.
+func (pt *PriceTable) UpdatePriceExp(ctx context.Context, direction string) error {
 	// 1. Retrieve the current ownPrice
 	ownPriceInterface, _ := pt.priceTableMap.Load("ownprice")
 	ownPrice := ownPriceInterface.(int64)
@@ -227,14 +197,20 @@ func (pt *PriceTable) UpdatePricebyQueueDelayLog(ctx context.Context) error {
 	// Implement the decay mechanism
 	if adjustment > 0 {
 		if pt.consecutiveIncreases >= 1 {
-			// If the counter exceeds the threshold, decay the step size by 1/2 ** counter
-			adjustment = int64(float64(adjustment) / math.Pow(2, float64(pt.consecutiveIncreases)))
+			if direction == "grow" {
+				// If the counter exceeds the threshold, grow the step size by 2 ** counter
+				adjustment = adjustment * int64(math.Pow(2, float64(pt.consecutiveIncreases)))
+			}
+			if direction == "decay" {
+				// If the counter exceeds the threshold, decay the step size by 1/2 ** counter
+				adjustment = int64(float64(adjustment) / math.Pow(2, float64(pt.consecutiveIncreases)))
+			}
 		}
 		pt.consecutiveIncreases++ // Increment counter for consecutive increases
 	} else {
 		// Reset counter and step size to non-decay version
 		pt.consecutiveIncreases = 0
-		logger("[Reset Price Step]: Price step reset to initial value %d\n", pt.initprice)
+		logger("[Reset Price Step]: Price step reset to initial value.")
 	}
 
 	logger("[Update Price by Queue Delay]: Own price %d, step %d\n", ownPrice, adjustment)
@@ -256,6 +232,16 @@ func (pt *PriceTable) UpdatePricebyQueueDelayLog(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// UpdatePriceExpDecay uses exponential function to adjust the price step.
+func (pt *PriceTable) UpdatePriceExpDecay(ctx context.Context) error {
+	return pt.UpdatePriceExp(ctx, "decay")
+}
+
+// UpdatePriceExpGrow uses exponential function to adjust the price step.
+func (pt *PriceTable) UpdatePriceExpGrow(ctx context.Context) error {
+	return pt.UpdatePriceExp(ctx, "grow")
 }
 
 // UpdateDownstreamPrice incorperates the downstream price table to its own price table.
