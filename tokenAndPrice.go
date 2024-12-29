@@ -136,7 +136,7 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 				if pt.priceStrategy == "expdecay" {
 					// If the counter exceeds the threshold, decay the step size by 1/5 ** counter
 					adjustment = int64(float64(adjustment) * math.Pow(pt.decayRate, float64(pt.consecutiveIncreases)))
-					logger("[Price Step Decay]: Price step decreased by 1/2 ** %d\n", pt.consecutiveIncreases)
+					logger("[Price Step Decay]: Price step decreased by %f ** %d\n", pt.decayRate, pt.consecutiveIncreases)
 				}
 			}
 			pt.consecutiveIncreases++ // Increment counter for consecutive increases
@@ -151,7 +151,7 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 				if pt.priceStrategy == "expdecay" {
 					// If the counter exceeds the threshold, decay the step size by 1/5 ** counter
 					adjustment = int64(float64(adjustment) * math.Pow(pt.decayRate, float64(pt.consecutiveDecreases)))
-					logger("[Price Step Decay]: Price step decreased by 4/5 ** %d\n", pt.consecutiveDecreases)
+					logger("[Price Step Decay]: Price step decreased by %f ** %d\n", pt.decayRate, pt.consecutiveDecreases)
 				}
 			}
 			pt.consecutiveDecreases++ // Increment counter for consecutive decreases
