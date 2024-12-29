@@ -159,8 +159,11 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 			pt.consecutiveIncreases = 0
 		}
 	} else if pt.priceStrategy == "quadratic" {
-		// Use a non-linear adjustment: larger adjustment for larger differences
+		// Use a quadratic adjustment: negative adjustment is also quadratic but negative
 		adjustment <<= 1
+		if diff < 0 {
+			adjustment = -adjustment
+		}
 	}
 
 	if pt.fastDrop && diff < 0 {
