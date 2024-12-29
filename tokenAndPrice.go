@@ -200,10 +200,12 @@ func (pt *PriceTable) UpdatePriceExp(ctx context.Context, direction string) erro
 			if direction == "grow" {
 				// If the counter exceeds the threshold, grow the step size by 2 ** counter
 				adjustment = adjustment * int64(math.Pow(2, float64(pt.consecutiveIncreases)))
+				logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveIncreases)
 			}
 			if direction == "decay" {
 				// If the counter exceeds the threshold, decay the step size by 1/2 ** counter
 				adjustment = int64(float64(adjustment) / math.Pow(2, float64(pt.consecutiveIncreases)))
+				logger("[Price Step Decay]: Price step decreased by 1/2 ** %d\n", pt.consecutiveIncreases)
 			}
 		}
 		pt.consecutiveIncreases++ // Increment counter for consecutive increases
