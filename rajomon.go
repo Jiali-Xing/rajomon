@@ -42,8 +42,9 @@ type PriceTable struct {
 	pinpointLatency    bool
 	pinpointQueuing    bool
 	rateLimiter        chan int64
-	invokeAfterRL      bool
+	fakeInvoker        bool
 	skipPrice          bool
+	fastDrop           bool
 	// updateRate is the rate at which price should be updated at least once.
 	tokensLeft           int64
 	tokenUpdateRate      time.Duration
@@ -230,7 +231,7 @@ func (pt *PriceTable) UnaryInterceptorEnduser(ctx context.Context, method string
 			// if the last digit is smaller than the randomRateLimit, then drop the request
 			if lastDigit < pt.randomRateLimit {
 				logger("[Random Drop]:	The request is dropped randomly.")
-				if pt.invokeAfterRL {
+				if pt.fakeInvoker {
 					opts = append(opts, grpc.MaxCallSendMsgSize(0))
 					_ = invoker(ctx, method, req, reply, cc, opts...)
 				}
@@ -248,7 +249,7 @@ func (pt *PriceTable) UnaryInterceptorEnduser(ctx context.Context, method string
 			// the request is dropped without waiting in this scenario, but we want to return an error to the client
 			// to do this, we use a fake invoker without actually sending the request to the server
 			// Invoke the gRPC method with the new callOptions: MaxCallSendMsgSize as 0 append to opts.
-			if pt.invokeAfterRL {
+			if pt.fakeInvoker {
 				// this fake invoker has very high overhead, so it is not recommended to use it in production, and not enabled by default.
 				opts = append(opts, grpc.MaxCallSendMsgSize(0))
 				_ = invoker(ctx, method, req, reply, cc, opts...)
@@ -267,7 +268,7 @@ func (pt *PriceTable) UnaryInterceptorEnduser(ctx context.Context, method string
 			logger("[Client Timeout]:	Client timeout waiting for tokens.\n")
 			// Invoke the gRPC method with the new callOptions: MaxCallSendMsgSize as 0
 			// append to opts
-			if pt.invokeAfterRL {
+			if pt.fakeInvoker {
 				opts = append(opts, grpc.MaxCallSendMsgSize(0))
 				_ = invoker(ctx, method, req, reply, cc, opts...)
 			}
@@ -303,7 +304,7 @@ func (pt *PriceTable) UnaryInterceptorEnduser(ctx context.Context, method string
 				// to do this, we use a fake invoker without actually sending the request to the server
 				// Invoke the gRPC method with the new callOptions: MaxCallSendMsgSize as 0
 				// append to opts
-				if pt.invokeAfterRL {
+				if pt.fakeInvoker {
 					opts = append(opts, grpc.MaxCallSendMsgSize(0))
 					_ = invoker(ctx, method, req, reply, cc, opts...)
 				}
@@ -325,7 +326,7 @@ func (pt *PriceTable) UnaryInterceptorEnduser(ctx context.Context, method string
 			logger("[Prepare Req]:	not enough tokens left for tok %d, no tokens deducted from client.\n", tok)
 			if !pt.rateLimitWaiting {
 				logger("[Rate Limited]:	Client is rate limited, req dropped without waiting.\n")
-				if pt.invokeAfterRL {
+				if pt.fakeInvoker {
 					opts = append(opts, grpc.MaxCallSendMsgSize(0))
 					_ = invoker(ctx, method, req, reply, cc, opts...)
 				}

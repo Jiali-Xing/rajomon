@@ -20,8 +20,9 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 		pinpointLatency:     false,
 		pinpointQueuing:     false,
 		rateLimiter:         make(chan int64, 1),
-		invokeAfterRL:       false,
+		fakeInvoker:         false,
 		skipPrice:           false,
+		fastDrop:            false,
 		tokensLeft:          10,
 		tokenUpdateRate:     time.Millisecond * 10,
 		lastUpdateTime:      time.Now(),
@@ -85,14 +86,19 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 		logger("pinpointQueuing		of %s set to %v\n", nodeName, pinpointQueuing)
 	}
 
-	if invokeAfterRL, ok := options["invokeAfterRL"].(bool); ok {
-		priceTable.invokeAfterRL = invokeAfterRL
-		logger("invokeAfterRL		of %s set to %v\n", nodeName, invokeAfterRL)
+	if fakeInvoker, ok := options["fakeInvoker"].(bool); ok {
+		priceTable.fakeInvoker = fakeInvoker
+		logger("fakeInvoker		of %s set to %v\n", nodeName, fakeInvoker)
 	}
 
 	if skipPrice, ok := options["lazyResponse"].(bool); ok {
 		priceTable.skipPrice = skipPrice
 		logger("skipPrice		of %s set to %v\n", nodeName, skipPrice)
+	}
+
+	if fastDrop, ok := options["fastDrop"].(bool); ok {
+		priceTable.fastDrop = fastDrop
+		logger("fastDrop		of %s set to %v\n", nodeName, fastDrop)
 	}
 
 	if tokensLeft, ok := options["tokensLeft"].(int64); ok {

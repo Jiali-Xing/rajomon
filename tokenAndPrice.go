@@ -113,78 +113,8 @@ func (pt *PriceTable) calculatePriceAdjustment(diff int64) int64 {
 	}
 }
 
-// The following functions are used to update the price table based on the queue delay, linearly and return adjustment any way.
-func (pt *PriceTable) calculatePriceAdjustmentLinear(diff int64) int64 {
-	adjustment := int64(diff * pt.priceStep / 10000)
-	return adjustment
-}
-
-// UpdatePricebyQueueDelay incorperates the queue delay to its own price steps. Thus, the price step is not linear.
-func (pt *PriceTable) UpdatePricebyQueueDelay(ctx context.Context) error {
-	ownPrice_string, _ := pt.priceTableMap.Load("ownprice")
-	ownPrice := ownPrice_string.(int64)
-
-	// read the gapLatency from context ctx
-	gapLatency := ctx.Value("gapLatency").(float64)
-	// Calculate the priceStep as a fraction of the difference between gapLatency and latencyThreshold
-	diff := int64(gapLatency*1000) - pt.latencyThreshold.Microseconds()
-	adjustment := pt.calculatePriceAdjustment(diff)
-
-	logger("[Update Price by Queue Delay]: Own price %d, step %d\n", ownPrice, adjustment)
-
-	ownPrice += adjustment
-	// Set reservePrice to the larger of pt.guidePrice and 0
-	reservePrice := int64(math.Max(float64(pt.guidePrice), 0))
-
-	if ownPrice <= reservePrice {
-		ownPrice = reservePrice
-	}
-
-	pt.priceTableMap.Store("ownprice", ownPrice)
-	// run the following code every 200 milliseconds
-	if pt.lastUpdateTime.Add(200 * time.Millisecond).Before(time.Now()) {
-		recordPrice("[Update Price by Queue Delay]: Own price updated to %d\n", ownPrice)
-		recordPrice("[Incremental Waiting Time Maximum]:	%f ms.\n", gapLatency)
-		pt.lastUpdateTime = time.Now()
-	}
-
-	return nil
-}
-
-// UpdatePricebyQueueDelay incorperates the queue delay to its own price steps. Thus, the price step is not linear.
-func (pt *PriceTable) UpdatePricebyQueueDelayLinear(ctx context.Context) error {
-	ownPrice_string, _ := pt.priceTableMap.Load("ownprice")
-	ownPrice := ownPrice_string.(int64)
-
-	// read the gapLatency from context ctx
-	gapLatency := ctx.Value("gapLatency").(float64)
-	// Calculate the priceStep as a fraction of the difference between gapLatency and latencyThreshold
-	diff := int64(gapLatency*1000) - pt.latencyThreshold.Microseconds()
-	adjustment := pt.calculatePriceAdjustmentLinear(diff)
-
-	logger("[Update Price by Queue Delay]: Own price %d, step %d\n", ownPrice, adjustment)
-
-	ownPrice += adjustment
-	// Set reservePrice to the larger of pt.guidePrice and 0
-	reservePrice := int64(math.Max(float64(pt.guidePrice), 0))
-
-	if ownPrice <= reservePrice {
-		ownPrice = reservePrice
-	}
-
-	pt.priceTableMap.Store("ownprice", ownPrice)
-	// run the following code every 200 milliseconds
-	if pt.lastUpdateTime.Add(200 * time.Millisecond).Before(time.Now()) {
-		recordPrice("[Update Price by Queue Delay]: Own price updated to %d\n", ownPrice)
-		recordPrice("[Incremental Waiting Time Maximum]:	%f ms.\n", gapLatency)
-		pt.lastUpdateTime = time.Now()
-	}
-
-	return nil
-}
-
-// UpdatePriceExpGrow uses exponential function to adjust the price step.
-func (pt *PriceTable) UpdatePriceExp(ctx context.Context, direction string) error {
+// merged function for both linear and exponential price update
+func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 	// 1. Retrieve the current ownPrice
 	ownPriceInterface, _ := pt.priceTableMap.Load("ownprice")
 	ownPrice := ownPriceInterface.(int64)
@@ -192,17 +122,17 @@ func (pt *PriceTable) UpdatePriceExp(ctx context.Context, direction string) erro
 	// 2. Extract gapLatency and calculate the latency difference (diff)
 	gapLatency := ctx.Value("gapLatency").(float64)
 	diff := int64(gapLatency*1000) - pt.latencyThreshold.Microseconds()
-	adjustment := pt.calculatePriceAdjustmentLinear(diff)
+	adjustment := diff * pt.priceStep / 10000
 
 	// Implement the decay mechanism
 	if adjustment > 0 {
-		if pt.consecutiveIncreases >= 1 {
-			if direction == "grow" {
+		if pt.priceStrategy != "linear" && pt.consecutiveIncreases >= 1 {
+			if pt.priceStrategy == "expgrow" {
 				// If the counter exceeds the threshold, grow the step size by 2 ** counter
 				adjustment = adjustment * int64(math.Pow(2, float64(pt.consecutiveIncreases)))
 				logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveIncreases)
 			}
-			if direction == "decay" {
+			if pt.priceStrategy == "expdecay" {
 				// If the counter exceeds the threshold, decay the step size by 1/2 ** counter
 				adjustment = int64(float64(adjustment) / math.Pow(2, float64(pt.consecutiveIncreases)))
 				logger("[Price Step Decay]: Price step decreased by 1/2 ** %d\n", pt.consecutiveIncreases)
@@ -213,6 +143,11 @@ func (pt *PriceTable) UpdatePriceExp(ctx context.Context, direction string) erro
 		// Reset counter and step size to non-decay version
 		pt.consecutiveIncreases = 0
 		logger("[Reset Price Step]: Price step reset to initial value.")
+		if pt.fastDrop {
+			// Implement the decay mechanism of fastdrop
+			adjustment = -ownPrice / 2
+			logger("[Price Step Decay]: Price step decreased by half\n")
+		}
 	}
 
 	logger("[Update Price by Queue Delay]: Own price %d, step %d\n", ownPrice, adjustment)
@@ -234,16 +169,6 @@ func (pt *PriceTable) UpdatePriceExp(ctx context.Context, direction string) erro
 	}
 
 	return nil
-}
-
-// UpdatePriceExpDecay uses exponential function to adjust the price step.
-func (pt *PriceTable) UpdatePriceExpDecay(ctx context.Context) error {
-	return pt.UpdatePriceExp(ctx, "decay")
-}
-
-// UpdatePriceExpGrow uses exponential function to adjust the price step.
-func (pt *PriceTable) UpdatePriceExpGrow(ctx context.Context) error {
-	return pt.UpdatePriceExp(ctx, "grow")
 }
 
 // UpdateDownstreamPrice incorperates the downstream price table to its own price table.

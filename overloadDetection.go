@@ -56,15 +56,10 @@ func (pt *PriceTable) queuingCheck() {
 
 		if pt.priceStrategy == "step" {
 			pt.UpdateOwnPrice(pt.overloadDetection(ctx))
-		} else if pt.priceStrategy == "proportional" {
-			pt.UpdatePricebyQueueDelay(ctx)
-		} else if pt.priceStrategy == "expgrow" {
-			pt.UpdatePriceExpGrow(ctx)
-		} else if pt.priceStrategy == "expdecay" {
-			pt.UpdatePriceExpDecay(ctx)
-		} else if pt.priceStrategy == "linear" {
-			pt.UpdatePricebyQueueDelayLinear(ctx)
+		} else {
+			pt.UpdatePrice(ctx)
 		}
+
 		// copy the content of current histogram to the previous histogram
 		prevHist = currHist
 		// log the time elapsed for the query
