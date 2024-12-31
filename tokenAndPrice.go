@@ -164,6 +164,22 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 		if diff < 0 {
 			adjustment = -adjustment
 		}
+	} else if pt.priceStrategy == "proportional" {
+		// Step 1: Calculate the base adjustment
+		baseAdjustment := float64(adjustment) / float64(pt.latencyThreshold.Microseconds())
+
+		// Step 2: Map adjustment into [-1, 1] using a logistic function
+		logisticValue := 2/(1+math.Exp(-baseAdjustment)) - 1
+		logger("[Proportional Pricing]: base adjustment %f and logistic value %f\n", baseAdjustment, logisticValue)
+
+		// Step 3: Scale [-1, 1] to [0, current price] or [current price, max token]
+		if logisticValue >= 0 {
+			adjustment = int64(logisticValue * float64(pt.maxToken-ownPrice))
+		} else {
+			adjustment = int64(logisticValue * float64(ownPrice))
+		}
+		logger("[Proportional Pricing]: Adjustment mapped via logistic function: %f\n", logisticValue)
+		pt.maxToken = 0 // Reset max token to 0
 	}
 
 	if pt.fastDrop && diff < 0 {

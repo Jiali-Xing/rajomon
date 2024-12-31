@@ -69,6 +69,7 @@ type PriceTable struct {
 	consecutiveIncreases int64
 	consecutiveDecreases int64
 	decayRate            float64
+	maxToken             int64
 }
 
 /*
@@ -129,6 +130,9 @@ func (pt *PriceTable) LoadShedding(ctx context.Context, tokens int64, methodName
 		}
 		if tokens >= ownPrice {
 			logger("[Performing AQM]: Request accepted. Token is %d, but price is %d\n", tokens, ownPrice)
+			if pt.priceStrategy == "proportional" && tokens > pt.maxToken {
+				pt.maxToken = tokens
+			}
 			return tokens - ownPrice, strconv.FormatInt(ownPrice, 10), nil
 		} else {
 			logger("[Performing AQM]: Request rejected for lack of tokens. Token is %d, but price is %d\n", tokens, ownPrice)

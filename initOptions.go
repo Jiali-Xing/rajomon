@@ -46,6 +46,7 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 		consecutiveIncreases: 0,
 		consecutiveDecreases: 0,
 		decayRate:            0.8,
+		maxToken:             10,
 	}
 
 	// create a new incoming context with the "request-id" as "0"
