@@ -127,17 +127,16 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 	// Implement the decay mechanism
 	if pt.priceStrategy == "expdecay" || pt.priceStrategy == "expgrow" {
 		if adjustment > 0 {
-			if pt.consecutiveIncreases >= 1 {
-				if pt.priceStrategy == "expgrow" {
-					// If the counter exceeds the threshold, grow the step size by 2 ** counter
-					adjustment <<= uint(pt.consecutiveIncreases)
-					logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveIncreases)
-				}
-				if pt.priceStrategy == "expdecay" {
-					// If the counter exceeds the threshold, decay the step size by 1/5 ** counter
-					adjustment = int64(float64(adjustment) * math.Pow(pt.decayRate, float64(pt.consecutiveIncreases)))
-					logger("[Price Step Decay]: Price step decreased by %f ** %d\n", pt.decayRate, pt.consecutiveIncreases)
-				}
+			if pt.consecutiveIncreases >= 1 && pt.priceStrategy == "expgrow" {
+				// If the counter exceeds the threshold, grow the step size by 2 ** counter
+				adjustment <<= uint(pt.consecutiveIncreases)
+				logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveIncreases)
+			}
+
+			if pt.consecutiveIncreases >= 4 && pt.priceStrategy == "expdecay" {
+				// If the counter exceeds the threshold, decay the step size by 1/5 ** counter
+				adjustment = int64(float64(adjustment) * math.Pow(pt.decayRate, float64(pt.consecutiveIncreases)))
+				logger("[Price Step Decay]: Price step decreased by %f ** %d\n", pt.decayRate, pt.consecutiveIncreases)
 			}
 			pt.consecutiveIncreases++ // Increment counter for consecutive increases
 			pt.consecutiveDecreases = 0
@@ -148,11 +147,6 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 					adjustment <<= uint(pt.consecutiveDecreases)
 					logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveDecreases)
 				}
-				if pt.priceStrategy == "expdecay" {
-					// If the counter exceeds the threshold, decay the step size by 1/5 ** counter
-					adjustment = int64(float64(adjustment) * math.Pow(pt.decayRate, float64(pt.consecutiveDecreases)))
-					logger("[Price Step Decay]: Price step decreased by %f ** %d\n", pt.decayRate, pt.consecutiveDecreases)
-				}
 			}
 			pt.consecutiveDecreases++ // Increment counter for consecutive decreases
 			// Reset counter and step size to non-decay version
@@ -160,9 +154,10 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 		}
 	} else if pt.priceStrategy == "quadratic" {
 		// Use a quadratic adjustment: negative adjustment is also quadratic but negative
-		adjustment <<= 1
 		if diff < 0 {
-			adjustment = -adjustment
+			adjustment = -(adjustment * adjustment)
+		} else {
+			adjustment *= adjustment
 		}
 	} else if pt.priceStrategy == "proportional" {
 		// Step 1: Calculate the base adjustment as the gap - threshold / threshold
