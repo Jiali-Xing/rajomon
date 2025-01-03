@@ -133,7 +133,7 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 				logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveIncreases)
 			}
 
-			if pt.consecutiveIncreases >= 4 && pt.priceStrategy == "expdecay" {
+			if pt.consecutiveIncreases >= 2 && pt.priceStrategy == "expdecay" {
 				// If the counter exceeds the threshold, decay the step size by 1/5 ** counter
 				adjustment = int64(float64(adjustment) * math.Pow(pt.decayRate, float64(pt.consecutiveIncreases)))
 				logger("[Price Step Decay]: Price step decreased by %f ** %d\n", pt.decayRate, pt.consecutiveIncreases)
@@ -183,7 +183,7 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 		pt.maxToken = 0 // Reset max token to 0
 	}
 
-	if pt.fastDrop && diff < 0 {
+	if pt.fastDrop && pt.consecutiveDecreases >= 4 {
 		// Implement the decay mechanism of fastdrop
 		adjustment = -ownPrice / pt.fastDropFactor
 		pt.consecutiveIncreases = 0
@@ -203,8 +203,9 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 	pt.priceTableMap.Store("ownprice", ownPrice)
 	// run the following code every 200 milliseconds
 	if pt.lastUpdateTime.Add(200 * time.Millisecond).Before(time.Now()) {
-		recordPrice("[Update Price by Queue Delay]: Own price updated to %d\n", ownPrice)
-		recordPrice("[Incremental Waiting Time Maximum]:	%f ms.\n", gapLatency)
+		// merge the log code into a single line
+		msgToLog := fmt.Sprintf("[Own price]: %d [Incremental Waiting Time Maximum]:	%.2f ms.\n", ownPrice, gapLatency)
+		recordPrice(msgToLog)
 		pt.lastUpdateTime = time.Now()
 	}
 
