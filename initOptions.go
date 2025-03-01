@@ -23,8 +23,6 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 		fakeInvoker:          false,
 		skipPrice:            false,
 		priceFreq:            5,
-		fastDrop:             false,
-		fastDropFactor:       4,
 		tokensLeft:           10,
 		tokenUpdateRate:      time.Millisecond * 10,
 		lastUpdateTime:       time.Now(),
@@ -45,7 +43,6 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 		priceAggregation:     "maximal",
 		guidePrice:           -1,
 		consecutiveIncreases: 0,
-		consecutiveDecreases: 0,
 		decayRate:            0.8,
 		maxToken:             10,
 	}
@@ -105,11 +102,6 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 	if priceFreq, ok := options["priceFreq"].(int64); ok {
 		priceTable.priceFreq = priceFreq
 		logger("priceFreq		of %s set to %v\n", nodeName, priceFreq)
-	}
-
-	if fastDrop, ok := options["fastDrop"].(bool); ok {
-		priceTable.fastDrop = fastDrop
-		logger("fastDrop		of %s set to %v\n", nodeName, fastDrop)
 	}
 
 	if tokensLeft, ok := options["tokensLeft"].(int64); ok {

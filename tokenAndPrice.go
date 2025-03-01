@@ -101,18 +101,6 @@ func (pt *PriceTable) UpdateOwnPrice(congestion bool) error {
 	return nil
 }
 
-func (pt *PriceTable) calculatePriceAdjustment(diff int64) int64 {
-	if diff > 0 {
-		// Use a non-linear adjustment: larger adjustment for larger differences
-		adjustment := int64(diff * pt.priceStep / 10000)
-		return adjustment
-	} else if 2*diff < -pt.latencyThreshold.Microseconds() {
-		return -1
-	} else {
-		return 0
-	}
-}
-
 // merged function for both linear and exponential price update
 func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 	// 1. Retrieve the current ownPrice
@@ -122,72 +110,30 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 	// 2. Extract gapLatency and calculate the latency difference (diff)
 	gapLatency := ctx.Value("gapLatency").(float64)
 	diff := int64(gapLatency*1000) - pt.latencyThreshold.Microseconds()
+
+	// proportionally adjust the price based on the latency difference if the priceStrategy is "proportional"
 	adjustment := diff * pt.priceStep / 10000
 
 	// Implement the decay mechanism
-	if pt.priceStrategy == "expdecay" || pt.priceStrategy == "expgrow" {
+	if pt.priceStrategy == "expdecay" {
 		if adjustment > 0 {
-			if pt.consecutiveIncreases >= 1 && pt.priceStrategy == "expgrow" {
-				// If the counter exceeds the threshold, grow the step size by 2 ** counter
-				adjustment <<= uint(pt.consecutiveIncreases)
-				logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveIncreases)
-			}
-
-			if pt.consecutiveIncreases >= 2 && pt.priceStrategy == "expdecay" {
+			if pt.consecutiveIncreases >= 2 {
 				// If the counter exceeds the threshold, decay the step size by 1/5 ** counter
 				adjustment = int64(float64(adjustment) * math.Pow(pt.decayRate, float64(pt.consecutiveIncreases)))
 				logger("[Price Step Decay]: Price step decreased by %f ** %d\n", pt.decayRate, pt.consecutiveIncreases)
 			}
 			pt.consecutiveIncreases++ // Increment counter for consecutive increases
-			pt.consecutiveDecreases = 0
-		} else if adjustment < 0 && !pt.fastDrop {
-			if pt.consecutiveDecreases >= 1 {
-				if pt.priceStrategy == "expgrow" {
-					// If the counter exceeds the threshold, grow the step size by 2 ** counter
-					adjustment <<= uint(pt.consecutiveDecreases)
-					logger("[Price Step Growth]: Price step increased by 2 ** %d\n", pt.consecutiveDecreases)
-				}
-			}
-			pt.consecutiveDecreases++ // Increment counter for consecutive decreases
+		} else if adjustment < 0 {
+
 			// Reset counter and step size to non-decay version
 			pt.consecutiveIncreases = 0
 		}
-	} else if pt.priceStrategy == "quadratic" {
-		// Use a quadratic adjustment: negative adjustment is also quadratic but negative
-		if diff < 0 {
-			adjustment = -(adjustment * adjustment)
-		} else {
-			adjustment *= adjustment
-		}
-	} else if pt.priceStrategy == "proportional" {
-		// Step 1: Calculate the base adjustment as the gap - threshold / threshold
-		baseAdjustment := float64(diff) / float64(pt.latencyThreshold.Microseconds())
-
-		// Step 2: Map adjustment into [-1, 1] using a logistic function
-		logisticValue := 2/(1+math.Exp(-baseAdjustment)) - 1
-		logger("[Proportional Pricing]: base adjustment %f and logistic value %f\n", baseAdjustment, logisticValue)
-
-		// Step 3: Scale [-1, 1] to [0, current price] or [current price, max token]
-		if logisticValue >= 0 {
-			adjustment = int64(logisticValue * float64(pt.maxToken-ownPrice))
-		} else {
-			adjustment = int64(logisticValue * float64(ownPrice))
-		}
-		logger("[Proportional Pricing]: Adjustment mapped via logistic function: %f\n", logisticValue)
-		pt.maxToken = 0 // Reset max token to 0
 	} else if pt.priceStrategy == "linearcap" {
 		// Use a linear adjustment: but cap the ceiling at maxToken
 		if adjustment > pt.maxToken-ownPrice {
 			adjustment = pt.maxToken - ownPrice
 		}
 		pt.maxToken = 0 // Reset max token to 0
-	}
-
-	if pt.fastDrop && pt.consecutiveDecreases >= 4 {
-		// Implement the decay mechanism of fastdrop
-		adjustment = -ownPrice / pt.fastDropFactor
-		pt.consecutiveIncreases = 0
-		logger("[Price Step Decay]: Price step decreased by 1/4 of current price.\n")
 	}
 
 	logger("[Update Price by Queue Delay]: Own price %d, step %d\n", ownPrice, adjustment)
