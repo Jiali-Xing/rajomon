@@ -22,6 +22,7 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 		rateLimiter:          make(chan int64, 1),
 		fakeInvoker:          false,
 		skipPrice:            false,
+		priceFreq:            5,
 		fastDrop:             false,
 		fastDropFactor:       4,
 		tokensLeft:           10,
@@ -99,6 +100,11 @@ func NewRajomon(nodeName string, callmap map[string][]string, options map[string
 	if skipPrice, ok := options["lazyResponse"].(bool); ok {
 		priceTable.skipPrice = skipPrice
 		logger("skipPrice		of %s set to %v\n", nodeName, skipPrice)
+	}
+
+	if priceFreq, ok := options["priceFreq"].(int64); ok {
+		priceTable.priceFreq = priceFreq
+		logger("priceFreq		of %s set to %v\n", nodeName, priceFreq)
 	}
 
 	if fastDrop, ok := options["fastDrop"].(bool); ok {

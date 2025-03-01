@@ -44,6 +44,7 @@ type PriceTable struct {
 	rateLimiter        chan int64
 	fakeInvoker        bool
 	skipPrice          bool
+	priceFreq          int64
 	fastDrop           bool
 	fastDropFactor     int64
 	// updateRate is the rate at which price should be updated at least once.
@@ -429,7 +430,7 @@ func (pt *PriceTable) UnaryInterceptor(ctx context.Context, req interface{}, inf
 
 		// [Jiali]: Trying to send the header to the client stochastically, to avoid abrupt over rate limiting that may cause goodput to drop.
 		// with a probability of 1/5, send the price on error response to the client.
-		if tok%5 == 0 {
+		if tok%pt.priceFreq == 0 {
 			logger("[Sending Error Resp]:	Total price is %s\n", price_string)
 			header := metadata.Pairs("price", price_string, "name", pt.nodeName)
 			grpc.SendHeader(ctx, header)
@@ -456,7 +457,7 @@ func (pt *PriceTable) UnaryInterceptor(ctx context.Context, req interface{}, inf
 	// right now let's just propagate the corresponding price of the RPC method rather than a whole pricetable.
 	// if not pt.skipPrice, then attach the price to the response with a probability of 1/5
 	if !pt.skipPrice {
-		if tok%5 == 0 {
+		if tok%pt.priceFreq == 0 {
 			header := metadata.Pairs("price", price_string, "name", pt.nodeName)
 			logger("[Preparing Resp]:	Total price of %s is %s\n", methodName, price_string)
 			grpc.SendHeader(ctx, header)
