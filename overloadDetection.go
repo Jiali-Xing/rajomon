@@ -33,6 +33,9 @@ func (pt *PriceTable) latencyCheck() {
 
 // queuingCheck checks if the queuing delay of go routine is greater than the latency SLO.
 func (pt *PriceTable) queuingCheck() {
+	// define a custom type for context key
+	type contextKey string
+
 	// init a null histogram
 	var prevHist *metrics.Float64Histogram
 	for range time.Tick(pt.priceUpdateRate) {
@@ -52,7 +55,7 @@ func (pt *PriceTable) queuingCheck() {
 
 		logger("[Incremental Waiting Time Maximum]:	%f ms.\n", gapLatency)
 		// store the gapLatency in the context ctx
-		ctx = context.WithValue(ctx, "gapLatency", gapLatency)
+		ctx = context.WithValue(ctx, contextKey("gapLatency"), gapLatency)
 
 		if pt.priceStrategy == "step" {
 			pt.UpdateOwnPrice(pt.overloadDetection(ctx))
