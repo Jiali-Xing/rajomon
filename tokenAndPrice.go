@@ -128,12 +128,6 @@ func (pt *PriceTable) UpdatePrice(ctx context.Context) error {
 			// Reset counter and step size to non-decay version
 			pt.consecutiveIncreases = 0
 		}
-	} else if pt.priceStrategy == "linearcap" {
-		// Use a linear adjustment: but cap the ceiling at maxToken
-		if adjustment > pt.maxToken-ownPrice {
-			adjustment = pt.maxToken - ownPrice
-		}
-		pt.maxToken = 0 // Reset max token to 0
 	}
 
 	logger("[Update Price by Queue Delay]: Own price %d, step %d\n", ownPrice, adjustment)
